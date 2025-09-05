@@ -2,8 +2,8 @@
 import React, { useEffect, useRef, useState } from "react";
 
 const CFG = {
-  BOT_USERNAME: process.env.NEXT_PUBLIC_BOT_USERNAME || "",
-  AUTH_URL: process.env.NEXT_PUBLIC_AUTH_URL || "/api/auth/telegram",
+  BOT_USERNAME: process.env.NEXT_PUBLIC_BOT_USERNAME ?? "",
+  AUTH_URL: process.env.NEXT_PUBLIC_AUTH_URL ?? "/api/auth/telegram",
   REQUEST_ACCESS: "write" as const,
 };
 
@@ -13,7 +13,7 @@ const isInsideTelegram =
 
 // ✅ Включаем Login Widget только если приложение открыто НЕ в Telegram
 const FLAGS = {
-  USE_WIDGET: !isInsideTelegram && ((process.env.NEXT_PUBLIC_USE_WIDGET || "0") === "1"),
+  USE_WIDGET: !isInsideTelegram && ((process.env.NEXT_PUBLIC_USE_WIDGET ?? "0") === "1"),
 };
 
 type TgUser = {
@@ -49,9 +49,9 @@ export function TelegramAuthApp() {
     (window as any).onTelegramAuth = (u: TgUser) => handleAuthSuccess(u);
 
     try {
-      const existing = document.querySelector(
-        `script[src^="https://telegram.org/js/telegram-widget.js"]`
-      ) as HTMLScriptElement | null;
+      const existing = document.querySelector<HTMLScriptElement>(
+        'script[src^="https://telegram.org/js/telegram-widget.js"]'
+      );
 
       const build = () => {
         const s = document.createElement("script");
@@ -86,10 +86,10 @@ export function TelegramAuthApp() {
 
     return () => {
       try {
-        if ((window as any).onTelegramAuth) delete (window as any).onTelegramAuth;
+        delete (window as any).onTelegramAuth;
       } catch {}
     };
-  }, []);
+  }, [FLAGS.USE_WIDGET, CFG.BOT_USERNAME, CFG.AUTH_URL]);
 
   // [WEBAPP] Авто-детект, если открыто как Telegram WebApp (Mini App)
   useEffect(() => {
