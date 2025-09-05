@@ -1,3 +1,4 @@
+// pages/index.tsx
 import React, { useEffect, useRef, useState } from "react";
 
 const CFG = {
@@ -6,8 +7,13 @@ const CFG = {
   REQUEST_ACCESS: "write" as const,
 };
 
+// ✅ Определяем, открыто ли приложение внутри Telegram Mini App (WebApp)
+const isInsideTelegram =
+  typeof window !== "undefined" && !!(window as any)?.Telegram?.WebApp;
+
+// ✅ Включаем Login Widget только если приложение открыто НЕ в Telegram
 const FLAGS = {
-  USE_WIDGET: true
+  USE_WIDGET: !isInsideTelegram && ((process.env.NEXT_PUBLIC_USE_WIDGET || "0") === "1"),
 };
 
 type TgUser = {
@@ -31,10 +37,14 @@ export function TelegramAuthApp() {
   const [widgetError, setWidgetError] = useState<string | null>(null);
   const [widgetReady, setWidgetReady] = useState(false);
 
-  // Виджет логина (используется как фолбэк, когда открыто не в Telegram)
+  // Виджет логина (фолбэк для браузера, когда НЕ в Telegram)
   useEffect(() => {
     if (!FLAGS.USE_WIDGET) return;
     if (!slotRef.current) return;
+    if (!CFG.BOT_USERNAME) {
+      setWidgetError("BOT_USERNAME is empty");
+      return;
+    }
 
     (window as any).onTelegramAuth = (u: TgUser) => handleAuthSuccess(u);
 
@@ -43,30 +53,34 @@ export function TelegramAuthApp() {
         `script[src^="https://telegram.org/js/telegram-widget.js"]`
       ) as HTMLScriptElement | null;
 
-      const script = existing || document.createElement("script");
-      if (!existing) {
-        script.src = "https://telegram.org/js/telegram-widget.js?22";
-        script.async = true;
-        script.defer = true;
-        script.setAttribute("data-telegram-login", CFG.BOT_USERNAME || "");
-        script.setAttribute("data-size", "large");
-        script.setAttribute("data-userpic", "false");
-        script.setAttribute("data-request-access", CFG.REQUEST_ACCESS);
+      const build = () => {
+        const s = document.createElement("script");
+        s.src = "https://telegram.org/js/telegram-widget.js?22";
+        s.async = true;
+        s.defer = true;
+        s.setAttribute("data-telegram-login", CFG.BOT_USERNAME);
+        s.setAttribute("data-size", "large");
+        s.setAttribute("data-userpic", "false");
+        s.setAttribute("data-request-access", CFG.REQUEST_ACCESS);
+        s.setAttribute("data-onauth", "onTelegramAuth");
+        if (CFG.AUTH_URL) s.setAttribute("data-auth-url", CFG.AUTH_URL);
+        s.onerror = () => setWidgetError("Widget blocked or failed to load");
+        s.onload = () => setWidgetReady(true);
+        return s;
+      };
+
+      const script = existing ? (existing.cloneNode(true) as HTMLScriptElement) : build();
+
+      if (existing) {
         script.setAttribute("data-onauth", "onTelegramAuth");
         if (CFG.AUTH_URL) script.setAttribute("data-auth-url", CFG.AUTH_URL);
         script.onerror = () => setWidgetError("Widget blocked or failed to load");
         script.onload = () => setWidgetReady(true);
-        slotRef.current.appendChild(script);
-      } else {
-        const clone = existing.cloneNode(true) as HTMLScriptElement;
-        clone.setAttribute("data-onauth", "onTelegramAuth");
-        if (CFG.AUTH_URL) clone.setAttribute("data-auth-url", CFG.AUTH_URL);
-        clone.onerror = () => setWidgetError("Widget blocked or failed to load");
-        clone.onload = () => setWidgetReady(true);
-        slotRef.current.innerHTML = "";
-        slotRef.current.appendChild(clone);
       }
-    } catch (err) {
+
+      slotRef.current.innerHTML = "";
+      slotRef.current.appendChild(script);
+    } catch {
       setWidgetError("Widget injection error");
     }
 
@@ -278,6 +292,7 @@ function MainMenu({ user, onLogout }: { user?: TgUser; onLogout: () => void }) {
   return (
     <div style={baseContainerStyle}>
       <Panel>
+        {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Logo />
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -291,6 +306,7 @@ function MainMenu({ user, onLogout }: { user?: TgUser; onLogout: () => void }) {
           </div>
         </div>
 
+        {/* Grid меню */}
         <div
           style={{
             marginTop: 24,
@@ -302,12 +318,7 @@ function MainMenu({ user, onLogout }: { user?: TgUser; onLogout: () => void }) {
           <MenuCard title="Маркет" subtitle="Гифты и коллекции" icon="🛍️" onClick={() => alert("Маркет")} />
           <MenuCard title="Мой профиль" subtitle="Баланс, достижения" icon="👤" onClick={() => alert("Профиль")} />
           <MenuCard title="Мои покупки" subtitle="История подарков" icon="🎁" onClick={() => alert("Покупки")} />
-          <MenuCard
-            title="Сообщество"
-            subtitle="Новости и чат"
-            icon="💬"
-            onClick={() => window.open("https://t.me/+gADPD5Z68f9kNTYy", "_blank")}
-          />
+          <MenuCard title="Сообщество" subtitle="Новости и чат" icon="💬" onClick={() => window.open("https://t.me/+gADPD5Z68f9kNTYy", "_blank")} />
           <MenuCard title="Поддержка" subtitle="Вопросы и помощь" icon="🛠️" onClick={() => alert("Поддержка")} />
           <MenuCard title="Выйти" subtitle="Завершить сессию" icon="🚪" onClick={onLogout} />
         </div>
@@ -498,14 +509,8 @@ function SecondaryButton({ onClick, children }: { onClick?: () => void; children
 function TelegramIcon({ size = 18 }: { size?: number }) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden>
-      <path d="M9.97 15.2l-.24 3.4c.35 0 .5-.15.68-.33l1.63-1.57 3.38 2.47c.62.34 1.07.16 1.24-.57l2.25-10.55c.2-.9-.33-1.25-.93-1.03L3.8 10.1c-.88.34-.87.83-.15 1.05л3.9 1.2 9.05-5.71c.43-.27.82-.12.5.16l-7.12 6.5z" />
+      {/* Исправлен путь: латинская 'l' вместо случайной кириллической 'л' */}
+      <path d="M9.97 15.2l-.24 3.4c.35 0 .5-.15.68-.33l1.63-1.57 3.38 2.47c.62.34 1.07.16 1.24-.57l2.25-10.55c.2-.9-.33-1.25-.93-1.03L3.8 10.1c-.88.34-.87.83-.15 1.05l3.9 1.2 9.05-5.71c.43-.27.82-.12.5.16l-7.12 6.5z" />
     </svg>
   );
-// Определяем, открыто ли внутри Telegram Mini App
-const isInsideTelegram =
-  typeof window !== "undefined" && !!(window as any)?.Telegram?.WebApp;
-
-const FLAGS = {
-  // Включаем Login Widget только если НЕ в Telegram
-  USE_WIDGET: !isInsideTelegram && ((process.env.NEXT_PUBLIC_USE_WIDGET || "0") === "1"),
-};
+}
