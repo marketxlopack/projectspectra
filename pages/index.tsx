@@ -7,7 +7,7 @@ const CFG = {
 };
 
 const FLAGS = {
-  USE_WIDGET: (process.env.NEXT_PUBLIC_USE_WIDGET || "0") === "1",
+  USE_WIDGET: true
 };
 
 type TgUser = {
