@@ -369,4 +369,56 @@ function TelegramIcon({ size = 18 }: { size?: number }) {
       <path d="M9.97 15.2l-.24 3.4c.35 0 .5-.15.68-.33l1.63-1.57 3.38 2.47c.62.34 1.07.16 1.24-.57l2.25-10.55c.2-.9-.33-1.25-.93-1.03L3.8 10.1c-.88.34-.87.83-.15 1.05l3.9 1.2 9.05-5.71c.43-.27.82-.12.5.16l-7.12 6.5z" />
     </svg>
   );
+// 1) Авто-детект, если открыто как Mini App (WebApp внутри Telegram)
+useEffect(() => {
+  const tg = (window as any)?.Telegram?.WebApp;
+  if (!tg) return;
+
+  try {
+    tg.ready();
+    tg.expand();
+    // Показать нижнюю кнопку TG (по желанию)
+    tg.MainButton.setText("Continue").show();
+    tg.MainButton.onClick(() => {
+      // при клике можно, например, отправить initData на бэк
+      sendInitDataToBackend();
+    });
+
+    // Если Telegram прислал user — сразу логинимся без виджета
+    const u = tg.initDataUnsafe?.user;
+    if (u) {
+      handleAuthSuccess({
+        id: u.id,
+        first_name: u.first_name,
+        last_name: u.last_name,
+        username: u.username,
+        photo_url: u.photo_url,
+        auth_date: Date.now(),
+        hash: "webapp",
+      });
+    }
+  } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
+// 2) Отправка initData на бэк для проверки подписи и установки cookie-сессии
+async function sendInitDataToBackend() {
+  const tg = (window as any)?.Telegram?.WebApp;
+  if (!tg?.initData) return;
+  try {
+    const res = await fetch("/api/auth/webapp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ initData: tg.initData }),
+    });
+    if (res.ok) {
+      // после успешной валидации можно перейти на /app
+      window.location.href = "/app";
+    } else {
+      const msg = await res.text();
+      alert("Auth error: " + msg);
+    }
+  } catch (e) {
+    alert("Network error");
+  }
 }
