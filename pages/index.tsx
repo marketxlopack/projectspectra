@@ -31,6 +31,7 @@ export function TelegramAuthApp() {
   const [widgetError, setWidgetError] = useState<string | null>(null);
   const [widgetReady, setWidgetReady] = useState(false);
 
+  // Виджет логина (используется как фолбэк, когда открыто не в Telegram)
   useEffect(() => {
     if (!FLAGS.USE_WIDGET) return;
     if (!slotRef.current) return;
@@ -76,6 +77,57 @@ export function TelegramAuthApp() {
     };
   }, []);
 
+  // [WEBAPP] Авто-детект, если открыто как Telegram WebApp (Mini App)
+  useEffect(() => {
+    const tg = (window as any)?.Telegram?.WebApp;
+    if (!tg) return;
+
+    tg.ready();
+    tg.expand();
+
+    // Показать нижнюю кнопку Telegram
+    tg.MainButton.setText("Continue").show();
+    tg.MainButton.onClick(() => {
+      sendInitDataToBackend();
+    });
+
+    // Если Telegram уже дал пользователя — авторизуем локально для UX
+    const u = tg.initDataUnsafe?.user;
+    if (u) {
+      handleAuthSuccess({
+        id: u.id,
+        first_name: u.first_name,
+        last_name: u.last_name,
+        username: u.username,
+        photo_url: u.photo_url,
+        auth_date: Date.now(),
+        hash: "webapp",
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // [WEBAPP] Отправка initData на бек для проверки подписи и установки сессии
+  async function sendInitDataToBackend() {
+    const tg = (window as any)?.Telegram?.WebApp;
+    if (!tg?.initData) return;
+    try {
+      const res = await fetch("/api/auth/webapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initData: tg.initData }),
+      });
+      if (res.ok) {
+        window.location.href = "/app";
+      } else {
+        const msg = await res.text();
+        alert("Auth error: " + msg);
+      }
+    } catch {
+      alert("Network error");
+    }
+  }
+
   function handleAuthSuccess(u: TgUser) {
     setUser(u);
     setPhase("loading");
@@ -108,16 +160,30 @@ export function TelegramAuthApp() {
     window.open("https://t.me/+gADPD5Z68f9kNTYy", "_blank");
   }
 
+  // Экраны
   if (phase === "loading") return <LoadingScreen user={user || undefined} />;
-  if (phase === "menu") return <MainMenu user={user || undefined} onLogout={() => { setUser(null); setPhase("auth"); }} />;
+  if (phase === "menu")
+    return (
+      <MainMenu
+        user={user || undefined}
+        onLogout={() => {
+          setUser(null);
+          setPhase("auth");
+        }}
+      />
+    );
 
+  // Экран авторизации
   const container: React.CSSProperties = baseContainerStyle;
   return (
     <div style={container}>
       <Panel>
         <Logo />
         <H1>Заходи через Telegram</H1>
-        <P>Моментальная авторизация без паролей. Мы получим только твои публичные данные Telegram (имя, юзернейм, аватар) — и создадим профиль.</P>
+        <P>
+          Моментальная авторизация без паролей. Мы получим только твои публичные данные Telegram
+          (имя, юзернейм, аватар) — и создадим профиль.
+        </P>
 
         <div ref={slotRef} style={{ minHeight: 44, marginTop: 8 }} />
         {FLAGS.USE_WIDGET && (
@@ -134,7 +200,9 @@ export function TelegramAuthApp() {
           <SecondaryButton onClick={openCommunity}>Join our Telegram Community</SecondaryButton>
         </Row>
 
-        <Small dim>Продолжая, вы соглашаетесь с Политикой конфиденциальности и Условиями сервиса.</Small>
+        <Small dim>
+          Продолжая, вы соглашаетесь с Политикой конфиденциальности и Условиями сервиса.
+        </Small>
       </Panel>
     </div>
   );
@@ -149,8 +217,25 @@ function LoadingScreen({ user }: { user?: TgUser }) {
         <div style={{ height: 24 }} />
         <Spinner />
         <H2>Подождите… создаём профиль</H2>
-        <P>{user?.first_name ? <>Привет, <b>{user.first_name}</b>!</> : <>Считываем данные Telegram…</>}</P>
-        <ul style={{ listStyle: "none", padding: 0, margin: 0, color: "#d6dbff", fontSize: 14, lineHeight: "20px" }}>
+        <P>
+          {user?.first_name ? (
+            <>
+              Привет, <b>{user.first_name}</b>!
+            </>
+          ) : (
+            <>Считываем данные Telegram…</>
+          )}
+        </P>
+        <ul
+          style={{
+            listStyle: "none",
+            padding: 0,
+            margin: 0,
+            color: "#d6dbff",
+            fontSize: 14,
+            lineHeight: "20px",
+          }}
+        >
           <li>• Проверяем подпись (HMAC)</li>
           <li>• Создаём/обновляем профиль</li>
           <li>• Загружаем аватар и имя</li>
@@ -161,9 +246,24 @@ function LoadingScreen({ user }: { user?: TgUser }) {
 }
 
 function Spinner() {
-  const wrap: React.CSSProperties = { position: "relative", width: 48, height: 48, margin: "12px auto" };
-  const ringBase: React.CSSProperties = { position: "absolute", inset: 0, borderRadius: 9999, border: "4px solid rgba(255,255,255,.15)" };
-  const ringSpin: React.CSSProperties = { ...ringBase, border: "4px solid #fff", borderTopColor: "transparent", animation: "spin 1s linear infinite" };
+  const wrap: React.CSSProperties = {
+    position: "relative",
+    width: 48,
+    height: 48,
+    margin: "12px auto",
+  };
+  const ringBase: React.CSSProperties = {
+    position: "absolute",
+    inset: 0,
+    borderRadius: 9999,
+    border: "4px solid rgba(255,255,255,.15)",
+  };
+  const ringSpin: React.CSSProperties = {
+    ...ringBase,
+    border: "4px solid #fff",
+    borderTopColor: "transparent",
+    animation: "spin 1s linear infinite",
+  };
   return (
     <div style={wrap}>
       <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
@@ -191,11 +291,23 @@ function MainMenu({ user, onLogout }: { user?: TgUser; onLogout: () => void }) {
           </div>
         </div>
 
-        <div style={{ marginTop: 24, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px,1fr))", gap: 12 }}>
+        <div
+          style={{
+            marginTop: 24,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px,1fr))",
+            gap: 12,
+          }}
+        >
           <MenuCard title="Маркет" subtitle="Гифты и коллекции" icon="🛍️" onClick={() => alert("Маркет")} />
           <MenuCard title="Мой профиль" subtitle="Баланс, достижения" icon="👤" onClick={() => alert("Профиль")} />
           <MenuCard title="Мои покупки" subtitle="История подарков" icon="🎁" onClick={() => alert("Покупки")} />
-          <MenuCard title="Сообщество" subtitle="Новости и чат" icon="💬" onClick={() => window.open("https://t.me/+gADPD5Z68f9kNTYy", "_blank")} />
+          <MenuCard
+            title="Сообщество"
+            subtitle="Новости и чат"
+            icon="💬"
+            onClick={() => window.open("https://t.me/+gADPD5Z68f9kNTYy", "_blank")}
+          />
           <MenuCard title="Поддержка" subtitle="Вопросы и помощь" icon="🛠️" onClick={() => alert("Поддержка")} />
           <MenuCard title="Выйти" subtitle="Завершить сессию" icon="🚪" onClick={onLogout} />
         </div>
@@ -224,7 +336,17 @@ function Avatar({ src }: { src?: string }) {
   );
 }
 
-function MenuCard({ title, subtitle, icon, onClick }: { title: string; subtitle: string; icon: string; onClick: () => void }) {
+function MenuCard({
+  title,
+  subtitle,
+  icon,
+  onClick,
+}: {
+  title: string;
+  subtitle: string;
+  icon: string;
+  onClick: () => void;
+}) {
   const card: React.CSSProperties = {
     position: "relative",
     textAlign: "left",
@@ -239,7 +361,8 @@ function MenuCard({ title, subtitle, icon, onClick }: { title: string; subtitle:
   const hover: React.CSSProperties = {
     position: "absolute",
     inset: -8,
-    background: "radial-gradient(400px 120px at 100% 0%, rgba(255,255,255,.12), transparent 60%)",
+    background:
+      "radial-gradient(400px 120px at 100% 0%, rgba(255,255,255,.12), transparent 60%)",
     opacity: 0,
     transition: "opacity .25s",
     pointerEvents: "none",
@@ -247,7 +370,16 @@ function MenuCard({ title, subtitle, icon, onClick }: { title: string; subtitle:
   const titleCss: React.CSSProperties = { fontWeight: 600, fontSize: 16 };
   const subCss: React.CSSProperties = { color: "#c9ceff", fontSize: 13, marginTop: 2 };
   return (
-    <div style={card} onClick={onClick} onMouseEnter={(e) => ((e.currentTarget.querySelector(".hoverFx") as HTMLDivElement).style.opacity = "1")} onMouseLeave={(e) => ((e.currentTarget.querySelector(".hoverFx") as HTMLDivElement).style.opacity = "0")}>
+    <div
+      style={card}
+      onClick={onClick}
+      onMouseEnter={(e) =>
+        ((e.currentTarget.querySelector(".hoverFx") as HTMLDivElement).style.opacity = "1")
+      }
+      onMouseLeave={(e) =>
+        ((e.currentTarget.querySelector(".hoverFx") as HTMLDivElement).style.opacity = "0")
+      }
+    >
       <div className="hoverFx" style={hover} />
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ fontSize: 22 }}>{icon}</div>
@@ -302,7 +434,7 @@ function Logo() {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#eaf0ff" }}>
       <TelegramIcon />
-      <span style={{ fontWeight: 600, letterSpacing: .2 }}>Spectra Market</span>
+      <span style={{ fontWeight: 600, letterSpacing: 0.2 }}>Spectra Market</span>
     </div>
   );
 }
@@ -366,59 +498,7 @@ function SecondaryButton({ onClick, children }: { onClick?: () => void; children
 function TelegramIcon({ size = 18 }: { size?: number }) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden>
-      <path d="M9.97 15.2l-.24 3.4c.35 0 .5-.15.68-.33l1.63-1.57 3.38 2.47c.62.34 1.07.16 1.24-.57l2.25-10.55c.2-.9-.33-1.25-.93-1.03L3.8 10.1c-.88.34-.87.83-.15 1.05l3.9 1.2 9.05-5.71c.43-.27.82-.12.5.16l-7.12 6.5z" />
+      <path d="M9.97 15.2l-.24 3.4c.35 0 .5-.15.68-.33l1.63-1.57 3.38 2.47c.62.34 1.07.16 1.24-.57l2.25-10.55c.2-.9-.33-1.25-.93-1.03L3.8 10.1c-.88.34-.87.83-.15 1.05л3.9 1.2 9.05-5.71c.43-.27.82-.12.5.16l-7.12 6.5z" />
     </svg>
   );
-// 1) Авто-детект, если открыто как Mini App (WebApp внутри Telegram)
-useEffect(() => {
-  const tg = (window as any)?.Telegram?.WebApp;
-  if (!tg) return;
-
-  try {
-    tg.ready();
-    tg.expand();
-    // Показать нижнюю кнопку TG (по желанию)
-    tg.MainButton.setText("Continue").show();
-    tg.MainButton.onClick(() => {
-      // при клике можно, например, отправить initData на бэк
-      sendInitDataToBackend();
-    });
-
-    // Если Telegram прислал user — сразу логинимся без виджета
-    const u = tg.initDataUnsafe?.user;
-    if (u) {
-      handleAuthSuccess({
-        id: u.id,
-        first_name: u.first_name,
-        last_name: u.last_name,
-        username: u.username,
-        photo_url: u.photo_url,
-        auth_date: Date.now(),
-        hash: "webapp",
-      });
-    }
-  } catch {}
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
-
-// 2) Отправка initData на бэк для проверки подписи и установки cookie-сессии
-async function sendInitDataToBackend() {
-  const tg = (window as any)?.Telegram?.WebApp;
-  if (!tg?.initData) return;
-  try {
-    const res = await fetch("/api/auth/webapp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ initData: tg.initData }),
-    });
-    if (res.ok) {
-      // после успешной валидации можно перейти на /app
-      window.location.href = "/app";
-    } else {
-      const msg = await res.text();
-      alert("Auth error: " + msg);
-    }
-  } catch (e) {
-    alert("Network error");
-  }
-}
+} // [FIX] — здесь компонент TelegramIcon ЗАКАНЧИВАЕТСЯ. Никаких useEffect/функций ниже него!
