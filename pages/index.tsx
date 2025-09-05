@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 
 const CFG = {
   BOT_USERNAME: process.env.NEXT_PUBLIC_BOT_USERNAME ?? "",
+  BOT_ID: process.env.NEXT_PUBLIC_BOT_ID ?? "",                    // 👈 ДОБАВЛЕНО
   AUTH_URL: process.env.NEXT_PUBLIC_AUTH_URL ?? "/api/auth/telegram",
   REQUEST_ACCESS: "write" as const,
 };
@@ -159,11 +160,16 @@ export function TelegramAuthApp() {
     });
   }
 
+  // ⬇️ ИЗМЕНОВАНО: используем bot_id вместо username в OAuth
   function openOAuth() {
     if (!FLAGS.USE_WIDGET) return simulateAuth();
     try {
+      if (!CFG.BOT_ID) {
+        alert("BOT_ID is empty");
+        return;
+      }
       const origin = encodeURIComponent(window.location.origin);
-      const url = `https://oauth.telegram.org/auth?bot=${CFG.BOT_USERNAME}&origin=${origin}&embed=1&request_access=${CFG.REQUEST_ACCESS}`;
+      const url = `https://oauth.telegram.org/auth?bot_id=${CFG.BOT_ID}&origin=${origin}&embed=1&request_access=${CFG.REQUEST_ACCESS}`;
       window.open(url, "tg_oauth", "noopener,noreferrer,width=550,height=700");
     } catch {
       simulateAuth();
