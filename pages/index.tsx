@@ -501,4 +501,11 @@ function TelegramIcon({ size = 18 }: { size?: number }) {
       <path d="M9.97 15.2l-.24 3.4c.35 0 .5-.15.68-.33l1.63-1.57 3.38 2.47c.62.34 1.07.16 1.24-.57l2.25-10.55c.2-.9-.33-1.25-.93-1.03L3.8 10.1c-.88.34-.87.83-.15 1.05л3.9 1.2 9.05-5.71c.43-.27.82-.12.5.16l-7.12 6.5z" />
     </svg>
   );
-} // [FIX] — здесь компонент TelegramIcon ЗАКАНЧИВАЕТСЯ. Никаких useEffect/функций ниже него!
+// Определяем, открыто ли внутри Telegram Mini App
+const isInsideTelegram =
+  typeof window !== "undefined" && !!(window as any)?.Telegram?.WebApp;
+
+const FLAGS = {
+  // Включаем Login Widget только если НЕ в Telegram
+  USE_WIDGET: !isInsideTelegram && ((process.env.NEXT_PUBLIC_USE_WIDGET || "0") === "1"),
+};
