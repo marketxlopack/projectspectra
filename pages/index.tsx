@@ -3,18 +3,9 @@ import React, { useEffect, useRef, useState } from "react";
 
 const CFG = {
   BOT_USERNAME: process.env.NEXT_PUBLIC_BOT_USERNAME ?? "",
-  BOT_ID: process.env.NEXT_PUBLIC_BOT_ID ?? "",                    // 👈 ДОБАВЛЕНО
+  BOT_ID: process.env.NEXT_PUBLIC_BOT_ID ?? "", // ← берём bot_id (цифры до двоеточия в токене)
   AUTH_URL: process.env.NEXT_PUBLIC_AUTH_URL ?? "/api/auth/telegram",
   REQUEST_ACCESS: "write" as const,
-};
-
-// ✅ Определяем, открыто ли приложение внутри Telegram Mini App (WebApp)
-const isInsideTelegram =
-  typeof window !== "undefined" && !!(window as any)?.Telegram?.WebApp;
-
-// ✅ Включаем Login Widget только если приложение открыто НЕ в Telegram
-const FLAGS = {
-  USE_WIDGET: !isInsideTelegram && ((process.env.NEXT_PUBLIC_USE_WIDGET ?? "0") === "1"),
 };
 
 type TgUser = {
@@ -38,9 +29,17 @@ export function TelegramAuthApp() {
   const [widgetError, setWidgetError] = useState<string | null>(null);
   const [widgetReady, setWidgetReady] = useState(false);
 
+  // ✅ Локальный флаг, включаем Login Widget ТОЛЬКО вне Telegram
+  const [useWidget, setUseWidget] = useState(false);
+  useEffect(() => {
+    const inside = !!(window as any)?.Telegram?.WebApp;
+    const wantWidget = (process.env.NEXT_PUBLIC_USE_WIDGET ?? "1") === "1";
+    setUseWidget(!inside && wantWidget);
+  }, []);
+
   // Виджет логина (фолбэк для браузера, когда НЕ в Telegram)
   useEffect(() => {
-    if (!FLAGS.USE_WIDGET) return;
+    if (!useWidget) return;
     if (!slotRef.current) return;
     if (!CFG.BOT_USERNAME) {
       setWidgetError("BOT_USERNAME is empty");
@@ -90,7 +89,7 @@ export function TelegramAuthApp() {
         delete (window as any).onTelegramAuth;
       } catch {}
     };
-  }, [FLAGS.USE_WIDGET, CFG.BOT_USERNAME, CFG.AUTH_URL]);
+  }, [useWidget, CFG.BOT_USERNAME, CFG.AUTH_URL]);
 
   // [WEBAPP] Авто-детект, если открыто как Telegram WebApp (Mini App)
   useEffect(() => {
@@ -160,9 +159,9 @@ export function TelegramAuthApp() {
     });
   }
 
-  // ⬇️ ИЗМЕНОВАНО: используем bot_id вместо username в OAuth
+  // ⬇️ Используем bot_id (а не username) для OAuth
   function openOAuth() {
-    if (!FLAGS.USE_WIDGET) return simulateAuth();
+    if (!useWidget) return simulateAuth();
     try {
       if (!CFG.BOT_ID) {
         alert("BOT_ID is empty");
@@ -206,7 +205,7 @@ export function TelegramAuthApp() {
         </P>
 
         <div ref={slotRef} style={{ minHeight: 44, marginTop: 8 }} />
-        {FLAGS.USE_WIDGET && (
+        {useWidget && (
           <small style={{ color: widgetError ? "#f8c4c4" : "#b8c0ff" }}>
             {!widgetReady && !widgetError && "Загружаем виджет…"}
             {widgetError && `${widgetError}. Используем локальный вход.`}
@@ -515,7 +514,7 @@ function SecondaryButton({ onClick, children }: { onClick?: () => void; children
 function TelegramIcon({ size = 18 }: { size?: number }) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden>
-      {/* Исправлен путь: латинская 'l' вместо случайной кириллической 'л' */}
+      {/* исправлено: только латинские символы в path */}
       <path d="M9.97 15.2l-.24 3.4c.35 0 .5-.15.68-.33l1.63-1.57 3.38 2.47c.62.34 1.07.16 1.24-.57l2.25-10.55c.2-.9-.33-1.25-.93-1.03L3.8 10.1c-.88.34-.87.83-.15 1.05l3.9 1.2 9.05-5.71c.43-.27.82-.12.5.16l-7.12 6.5z" />
     </svg>
   );
