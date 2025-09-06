@@ -518,4 +518,31 @@ function TelegramIcon({ size = 18 }: { size?: number }) {
       <path d="M9.97 15.2l-.24 3.4c.35 0 .5-.15.68-.33l1.63-1.57 3.38 2.47c.62.34 1.07.16 1.24-.57l2.25-10.55c.2-.9-.33-1.25-.93-1.03L3.8 10.1c-.88.34-.87.83-.15 1.05l3.9 1.2 9.05-5.71c.43-.27.82-.12.5.16l-7.12 6.5z" />
     </svg>
   );
+// ⬇️ Используем bot_id, при его отсутствии — bot=username
+function openOAuth() {
+  if (!useWidget) return simulateAuth();
+
+  const origin = encodeURIComponent(window.location.origin);
+  const params = new URLSearchParams({
+    origin,
+    embed: "1",
+    request_access: CFG.REQUEST_ACCESS,
+  });
+
+  if (CFG.BOT_ID) {
+    params.set("bot_id", CFG.BOT_ID);
+  } else if (CFG.BOT_USERNAME) {
+    console.warn("[OAuth] NEXT_PUBLIC_BOT_ID пуст, использую bot=<username>");
+    params.set("bot", CFG.BOT_USERNAME);
+  } else {
+    alert("Нужно задать NEXT_PUBLIC_BOT_ID или NEXT_PUBLIC_BOT_USERNAME");
+    return;
+  }
+
+  window.open(
+    `https://oauth.telegram.org/auth?${params.toString()}`,
+    "tg_oauth",
+    "noopener,noreferrer,width=550,height=700"
+  );
 }
+
